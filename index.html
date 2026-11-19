@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeoWeather Explorer — OpenStreetMap & OpenWeather API</title>
+  <!-- Leaflet CSS (OpenStreetMap Interactive Map) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-icon">🌍</span>
+      <div>
+        <h1>GeoWeather Explorer</h1>
+        <p class="subtitle">Tích hợp OpenStreetMap API (Nominatim & Overpass) + OpenWeather API</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <form id="search-form" class="search-box">
+        <input
+          type="text"
+          id="search-input"
+          placeholder="Nhập thành phố hoặc địa chỉ (VD: Ho Chi Minh City, Da Nang)..."
+          autocomplete="off"
+          required
+        />
+        <button type="submit" id="search-btn">Tìm kiếm</button>
+      </form>
+
+      <button id="locate-btn" class="btn-secondary" title="Định vị vị trí hiện tại">
+        📍 Vị trí của tôi
+      </button>
+
+      <button id="unit-toggle" class="btn-secondary" title="Chuyển đổi đơn vị nhiệt độ">
+        °C / °F
+      </button>
+
+      <button id="settings-btn" class="btn-primary" title="Cấu hình OpenWeather API Key">
+        🔑 API Key
+      </button>
+    </div>
+  </header>
+
+  <div id="demo-banner" class="demo-banner hidden">
+    <span>⚠️ Đang chạy ở <strong>Chế độ Demo (dữ liệu thời tiết mô phỏng)</strong> vì chưa nhập OpenWeather API Key. Bản đồ & địa điểm OpenStreetMap vẫn hoạt động trực tiếp (Live).</span>
+    <button id="banner-key-btn">Nhập API Key ngay</button>
+  </div>
+
+  <main class="app-layout">
+    <!-- Sidebar thông tin -->
+    <aside class="sidebar">
+      <!-- Chọn nhanh thành phố -->
+      <section class="card quick-cities">
+        <h2>Khám phá nhanh</h2>
+        <div class="chip-group">
+          <button class="chip" data-city="Ho Chi Minh City, Vietnam">TP. Hồ Chí Minh</button>
+          <button class="chip" data-city="Hanoi, Vietnam">Hà Nội</button>
+          <button class="chip" data-city="Da Nang, Vietnam">Đà Nẵng</button>
+          <button class="chip" data-city="Tokyo, Japan">Tokyo</button>
+          <button class="chip" data-city="London, UK">London</button>
+        </div>
+      </section>
+
+      <!-- Thời tiết hiện tại (OpenWeather API) -->
+      <section class="card weather-card" id="weather-section">
+        <div class="card-header">
+          <h2>Thời tiết hiện tại</h2>
+          <button id="save-fav-btn" class="icon-btn" title="Lưu địa điểm yêu thích">☆ Lưu</button>
+        </div>
+
+        <div id="weather-loading" class="status-msg hidden">Đang tải dữ liệu thời tiết...</div>
+        <div id="weather-error" class="error-msg hidden"></div>
+
+        <div id="weather-content">
+          <div class="location-info">
+            <h3 id="place-name">TP. Hồ Chí Minh, Việt Nam</h3>
+            <p id="place-address" class="muted">Nhấn vào bất kỳ điểm nào trên bản đồ để xem thông tin chi tiết.</p>
+            <p id="place-coords" class="coords">Lat: 10.7769 | Lon: 106.7009</p>
+          </div>
+
+          <div class="weather-main">
+            <img id="weather-icon" src="https://openweathermap.org/img/wn/02d@2x.png" alt="Weather Icon" />
+            <div>
+              <div id="weather-temp" class="temp-value">--°C</div>
+              <div id="weather-desc" class="weather-desc">Đang chờ dữ liệu...</div>
+            </div>
+          </div>
+
+          <div class="weather-metrics">
+            <div class="metric">
+              <span class="label">Cảm giác như</span>
+              <strong id="metric-feels">--</strong>
+            </div>
+            <div class="metric">
+              <span class="label">Độ ẩm</span>
+              <strong id="metric-humidity">--</strong>
+            </div>
+            <div class="metric">
+              <span class="label">Tốc độ gió</span>
+              <strong id="metric-wind">--</strong>
+            </div>
+            <div class="metric">
+              <span class="label">Áp suất</span>
+              <strong id="metric-pressure">--</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dự báo 5 ngày (OpenWeather 5-Day Forecast API) -->
+      <section class="card forecast-card">
+        <h2>Dự báo 5 ngày tới</h2>
+        <div id="forecast-list" class="forecast-list">
+          <p class="muted">Chọn địa điểm để xem dự báo.</p>
+        </div>
+      </section>
+
+      <!-- Tiện ích xung quanh (OpenStreetMap Overpass API) -->
+      <section class="card poi-card">
+        <div class="card-header">
+          <h2>Địa điểm lân cận (OSM Overpass)</h2>
+        </div>
+        <div class="poi-controls">
+          <select id="poi-category">
+            <option value="cafe">☕ Quán cà phê</option>
+            <option value="restaurant">🍽️ Nhà hàng</option>
+            <option value="hospital">🏥 Bệnh viện / Phòng khám</option>
+            <option value="park">🌳 Công viên</option>
+            <option value="fuel">⛽ Trạm xăng</option>
+          </select>
+          <button id="find-poi-btn" class="btn-primary">Tìm bán kính 1.5km</button>
+        </div>
+        <div id="poi-status" class="status-msg hidden"></div>
+        <ul id="poi-list" class="poi-list">
+          <li class="muted">Nhấn "Tìm bán kính 1.5km" để quét tiện ích từ OpenStreetMap.</li>
+        </ul>
+      </section>
+
+      <!-- Địa điểm đã lưu -->
+      <section class="card favorites-card">
+        <h2>Địa điểm đã lưu</h2>
+        <ul id="favorites-list" class="favorites-list">
+          <li class="muted">Chưa có địa điểm yêu thích nào.</li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- Khu vực bản đồ OpenStreetMap -->
+    <section class="map-container">
+      <div id="map"></div>
+      <div class="map-overlay-hint">
+        💡 Mẹo: Click trực tiếp vào bất kỳ vị trí nào trên bản đồ để Reverse Geocoding (OSM) &amp; xem thời tiết (OpenWeather).
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal nhập OpenWeather API Key -->
+  <div id="api-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Cấu hình OpenWeather API Key</h3>
+        <button id="close-modal-btn" class="close-btn">&times;</button>
+      </div>
+      <p class="muted">
+        Nhập API Key miễn phí từ <a href="https://openweathermap.org/api" target="_blank" rel="noopener">openweathermap.org</a>.
+        Key chỉ được lưu cục bộ trong <code>localStorage</code> của trình duyệt.
+      </p>
+      <input
+        type="text"
+        id="api-key-input"
+        placeholder="Dán OpenWeather API Key của bạn vào đây..."
+      />
+      <div class="modal-actions">
+        <button id="clear-key-btn" class="btn-secondary">Dùng chế độ Demo</button>
+        <button id="save-key-btn" class="btn-primary">Lưu &amp; Áp dụng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="app.js"></script>
+</body>
+</html>
